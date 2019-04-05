@@ -26,9 +26,12 @@ namespace WindowsFormsApp2
         private List<Vector3D>    UVCoords = new List<Vector3D>();    // Координаты
         private HashSet<Vector3D> UVVertex = new HashSet<Vector3D>(); // Оптимизированный массив точек
 
-        private const int zoomFactor   = 8;
-        private int defaultTextureSize = 512;
-        private bool updateView = false;
+        private const int zoomFactor         = 8;
+        private int defaultTextureSize       = 512;
+        private int[] startDragPositionMouse = new int[2] { 0, 0 };   // Координаты мышки
+        private bool isDrawing               = false;                 // Идет отрисовка
+        private bool startDrag               = false;
+
 
         private System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 
@@ -105,7 +108,6 @@ namespace WindowsFormsApp2
 
         private void pictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
-            
             if (e.Delta < 0)
             {
                 ZoomIn(e.X, e.Y);
@@ -152,14 +154,16 @@ namespace WindowsFormsApp2
             // При приближении учитываем положение курсора мыши
             if (pictureBox1.Width > panelOutPictureBox.Width || pictureBox1.Height > panelOutPictureBox.Height)
             {
-                pictureBox1.Location = new Point(panelOutPictureBox.Width  - (pictureBox1.Width / 2 + x),
-                    panelOutPictureBox.Height  - (pictureBox1.Height / 2 + y));
-            } else {
+                // ToDo: Привязать координаты мыши
+                pictureBox1.Location = new Point(panelOutPictureBox.Width / 2 - pictureBox1.Width / 2,
+                    panelOutPictureBox.Height / 2 - pictureBox1.Height / 2);
+            }
+            else {
                 pictureBox1.Location = new Point(panelOutPictureBox.Width / 2 - pictureBox1.Width / 2,
                     panelOutPictureBox.Height / 2 - pictureBox1.Height / 2);
             }
 
-            updateView = true;
+            DrawImage();
         }
 
         private void textBoxZoom_UpdateValue()
@@ -170,80 +174,87 @@ namespace WindowsFormsApp2
         private void DrawImage()
         {
             sw.Start();
-            int textureSize = pictureBox1.Width;
-
-            Bitmap frameImage = new Bitmap(textureSize, textureSize);
-            using (Graphics gr = Graphics.FromImage(frameImage))
+            if (!isDrawing)
             {
-                gr.SmoothingMode = SmoothingMode.None;               // Качество в минимум для ускорения
+                isDrawing = true;
+                int textureSize = pictureBox1.Width;
 
-                // Обрезаем область рисования                
-                int clipX = (textureSize > panelOutPictureBox.Width)  ? Math.Abs(pictureBox1.Location.X) : 0;
-                int clipY = (textureSize > panelOutPictureBox.Height) ? Math.Abs(pictureBox1.Location.Y) : 0;
-                int clipW = (textureSize > panelOutPictureBox.Width)  ? panelOutPictureBox.Width : textureSize;
-                int clipH = (textureSize > panelOutPictureBox.Height) ? panelOutPictureBox.Height : textureSize;
-
-                Rectangle clip = new Rectangle(clipX, clipY, clipW, clipH);
-                //gr.SetClip(clip);
-
-                // Сетка
-                using (Pen axis = new Pen(Color.FromArgb(127, 127, 127)))
+                Bitmap frameImage = new Bitmap(textureSize, textureSize);
+                using (Graphics gr = Graphics.FromImage(frameImage))
                 {
-                    int widthLines = textureSize / 32;
-                    int heightLines = textureSize / 32;
-                    for (int i = 0; i < textureSize - widthLines; i += widthLines)
-                    {
-                        // Вертикальные
-                        gr.DrawLine(axis, new Point(i + widthLines, 0), new Point(i + widthLines, textureSize));
+                    gr.SmoothingMode = SmoothingMode.None;               // Качество в минимум для ускорения
 
-                        // Горизонтальные
-                        gr.DrawLine(axis, new Point(0, i + heightLines), new Point(textureSize, i + heightLines));
-                    }
-                }
+                    // Обрезаем область рисования                
+                    int clipX = (textureSize > panelOutPictureBox.Width) ? -pictureBox1.Location.X : 0;
+                    int clipY = (textureSize > panelOutPictureBox.Height) ? -pictureBox1.Location.Y : 0;
+                    int clipW = (textureSize > panelOutPictureBox.Width) ? panelOutPictureBox.Width : textureSize;
+                    int clipH = (textureSize > panelOutPictureBox.Height) ? panelOutPictureBox.Height : textureSize;
 
-                // Развертка
-                if (UVCoords != null && UVCoords.Count > 0)
-                {
-                    // Полигоны
-                    using (Brush trisFill = new SolidBrush(Color.FromArgb(128, 150, 140, 220)))
-                    using (Pen trisLine   = new Pen(Color.FromArgb(67, 255, 163)))
-                    for (int i = 0; i < UVCoords.Count; i++)
+                    // ToDo: Убрать отрисовку полигонов которые не входят в область видимости
+
+                    Rectangle clip = new Rectangle(clipX, clipY, clipW, clipH);
+                    gr.SetClip(clip);
+
+
+                    // Сетка
+                    using (Pen axis = new Pen(Color.FromArgb(127, 127, 127)))
                     {
-                        if (i % 3 == 2)
+                        int widthLines = textureSize / 32;
+                        int heightLines = textureSize / 32;
+                        for (int i = 0; i < textureSize - widthLines; i += widthLines)
                         {
-                            PointF pa = new PointF(textureSize * UVCoords[i].X, textureSize * (1 - UVCoords[i].Y));
-                            PointF pb = new PointF(textureSize * UVCoords[i - 1].X, textureSize * (1 - UVCoords[i - 1].Y));
-                            PointF pc = new PointF(textureSize * UVCoords[i - 2].X, textureSize * (1 - UVCoords[i - 2].Y));
-                            PointF[] polyPoints = { pa, pb, pc };
-                            GraphicsPath path = new GraphicsPath();
-                            path.AddPolygon(polyPoints);
-                            gr.FillPolygon(trisFill, polyPoints);
-                            if (checkBoxShowEdge.Checked)
-                            {
-                                gr.DrawPath(trisLine, path);
-                            }
+                            // Вертикальные
+                            gr.DrawLine(axis, new Point(i + widthLines, 0), new Point(i + widthLines, textureSize));
+
+                            // Горизонтальные
+                            gr.DrawLine(axis, new Point(0, i + heightLines), new Point(textureSize, i + heightLines));
                         }
                     }
 
-                    // Вершины
-                    if (checkBoxShowVertex.Checked)
+                    // Развертка
+                    if (UVCoords != null && UVCoords.Count > 0)
                     {
-                        using (Brush trisFill = new SolidBrush(Color.FromArgb(255, 133, 0)))
-                            foreach (Vector3D uv in UVVertex)
+                        // Полигоны
+                        using (Brush trisFill = new SolidBrush(Color.FromArgb(128, 150, 140, 220)))
+                        using (Pen trisLine = new Pen(Color.FromArgb(67, 255, 163)))
+                            for (int i = 0; i < UVCoords.Count; i++)
                             {
-                                Point pa = new Point((int)(textureSize * uv.X), (int)(textureSize * (1 - uv.Y)));
-                                Rectangle rect = new Rectangle(pa.X - 1, pa.Y - 1, 3, 3);
-                                gr.FillRectangle(trisFill, rect);
+                                if (i % 3 == 2)
+                                {
+                                    PointF pa = new PointF(textureSize * UVCoords[i].X, textureSize * (1 - UVCoords[i].Y));
+                                    PointF pb = new PointF(textureSize * UVCoords[i - 1].X, textureSize * (1 - UVCoords[i - 1].Y));
+                                    PointF pc = new PointF(textureSize * UVCoords[i - 2].X, textureSize * (1 - UVCoords[i - 2].Y));
+                                    PointF[] polyPoints = { pa, pb, pc };
+                                    GraphicsPath path = new GraphicsPath();
+                                    path.AddPolygon(polyPoints);
+                                    gr.FillPolygon(trisFill, polyPoints);
+                                    if (checkBoxShowEdge.Checked)
+                                    {
+                                        gr.DrawPath(trisLine, path);
+                                    }
+                                }
                             }
+
+                        // Вершины
+                        if (checkBoxShowVertex.Checked)
+                        {
+                            using (Brush trisFill = new SolidBrush(Color.FromArgb(255, 133, 0)))
+                                foreach (Vector3D uv in UVVertex)
+                                {
+                                    Point pa = new Point((int)(textureSize * uv.X), (int)(textureSize * (1 - uv.Y)));
+                                    Rectangle rect = new Rectangle(pa.X - 1, pa.Y - 1, 3, 3);
+                                    gr.FillRectangle(trisFill, rect);
+                                }
+                        }
                     }
-                }
 
-                pictureBox1.Image = (Image)frameImage;
-                pictureBox1.Invalidate();
-            } // Dispose Graphics gr
+                    pictureBox1.Image = (Image)frameImage;
+                    pictureBox1.Invalidate();
+                } // Dispose Graphics gr
+                isDrawing = false;
+            }
 
-            sw.Stop();
-            
+            sw.Stop();            
             textBox1.AppendText(String.Format("Draw: {0} sec.{1}", (sw.ElapsedMilliseconds / 100.0), Environment.NewLine));
             sw.Reset();
         }
@@ -268,11 +279,37 @@ namespace WindowsFormsApp2
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            if (updateView == true)
+
+        }
+
+        private void pictureBox1_MouseDown(object sender, MouseEventArgs e)
+        {
+            // Перетаскиваем область
+            if (e.Button == MouseButtons.Middle)
+            {
+                startDrag  = true;
+                startDragPositionMouse[0] = e.X;
+                startDragPositionMouse[1] = e.Y;
+            }    
+        }        
+
+        private void pictureBox1_MouseUp(object sender, MouseEventArgs e)
+        {
+            // Перетаскиваем область
+            if (e.Button == MouseButtons.Middle)
             {
                 DrawImage();
+                startDrag = false;
             }
-            updateView = false;
+        }
+
+        private void pictureBox1_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (startDrag == true)
+            {
+                pictureBox1.Location = new Point(pictureBox1.Location.X - (startDragPositionMouse[0] - e.X),
+                    pictureBox1.Location.Y - (startDragPositionMouse[1] - e.Y));
+            }
         }
     }
 }
