@@ -105,17 +105,18 @@ namespace WindowsFormsApp2
 
         private void pictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
+            
             if (e.Delta < 0)
             {
-                ZoomIn();
+                ZoomIn(e.X, e.Y);
             }
             else
             {
-                ZoomOut();
+                ZoomOut(e.X, e.Y);
             }
         }
 
-        private void ZoomIn()
+        private void ZoomIn(int x, int y)
         {
             if (pictureBox1.Width < 16384)
             {
@@ -127,11 +128,11 @@ namespace WindowsFormsApp2
             }
 
 
-            pictureBox1_UpdateLocation();
+            pictureBox1_UpdateLocation(x, y);
             textBoxZoom_UpdateValue();
         }
 
-        private void ZoomOut()
+        private void ZoomOut(int x, int y)
         {
             if (pictureBox1.Width > 128)
             {
@@ -142,15 +143,21 @@ namespace WindowsFormsApp2
                 defaultTextureSize = defaultTextureSize - inc;
             }
 
-            pictureBox1_UpdateLocation();
+            pictureBox1_UpdateLocation(x, y);
             textBoxZoom_UpdateValue();
         }
 
-        private void pictureBox1_UpdateLocation()
+        private void pictureBox1_UpdateLocation(int x, int y)
         {
-            // ToDo Курсор мыши
-            pictureBox1.Location = new Point(panelOutPictureBox.Width / 2 - pictureBox1.Width / 2,
-                panelOutPictureBox.Height / 2 - pictureBox1.Height / 2);
+            // При приближении учитываем положение курсора мыши
+            if (pictureBox1.Width > panelOutPictureBox.Width || pictureBox1.Height > panelOutPictureBox.Height)
+            {
+                pictureBox1.Location = new Point(panelOutPictureBox.Width  - (pictureBox1.Width / 2 + x),
+                    panelOutPictureBox.Height  - (pictureBox1.Height / 2 + y));
+            } else {
+                pictureBox1.Location = new Point(panelOutPictureBox.Width / 2 - pictureBox1.Width / 2,
+                    panelOutPictureBox.Height / 2 - pictureBox1.Height / 2);
+            }
 
             updateView = true;
         }
@@ -177,7 +184,7 @@ namespace WindowsFormsApp2
                 int clipH = (textureSize > panelOutPictureBox.Height) ? panelOutPictureBox.Height : textureSize;
 
                 Rectangle clip = new Rectangle(clipX, clipY, clipW, clipH);
-                gr.SetClip(clip);
+                //gr.SetClip(clip);
 
                 // Сетка
                 using (Pen axis = new Pen(Color.FromArgb(127, 127, 127)))

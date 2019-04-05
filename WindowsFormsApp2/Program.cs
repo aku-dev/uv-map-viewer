@@ -12,6 +12,7 @@ namespace WindowsFormsApp2
         /// Главная точка входа для приложения.
         /// </summary>
         [STAThread]
+
         static void Main()
         {
             Application.EnableVisualStyles();
